@@ -49,6 +49,19 @@ private slots:
         coro::exec();
         QVERIFY(caught);
     }
+
+    void thenInvokesCallbackWithResult() {
+        Emitter2 e;
+        int got = 0;
+        coro::launch([&]{
+            coro::Task<int> t = coro::async([&]{ return coro::await(&e, &Emitter2::value); });
+            t.then([&](int v){ got = v; coro::quit(); });
+            // 注意：launch 体在此返回，then 的 watcher fiber 负责后续
+        });
+        QTimer::singleShot(10, [&]{ emit e.value(123); });
+        coro::exec();
+        QCOMPARE(got, 123);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestTask)
