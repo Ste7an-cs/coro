@@ -5,3 +5,4 @@ function(add_qfcoro_test name)
 endfunction()
 
 add_qfcoro_test(test_driver)
+add_qfcoro_test(test_sleep)
