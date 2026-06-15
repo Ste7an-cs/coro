@@ -120,6 +120,7 @@ namespace coro {
 - **QFuture<T>**:栈上 `QFutureWatcher<T>` watcher,`setFuture(f)`,connect `finished` → `set_value(watcher.result())`;若已 finished 则立即取值,避免错过信号。
 - **QIODevice**:connect `readyRead`(并连接错误/关闭信号以便抛错或返回);单次唤醒。
 - **错误处理**:风格 A 异常沿 fiber 栈正常传播;`Task<T>` 将异常存入 future,在 `get()` / `then` 时重抛;设备或 Future 出错抛 `coro::AwaitError`(继承 `std::runtime_error`)。
+  - **实现状态(已延期)**:本版本**未实现** `coro::AwaitError`,`await(QIODevice*)` 也只连接 `readyRead`、未连接错误/关闭信号。设备/信号层的错误与取消统一归入"单次语义、无取消/超时"的已知限制(见 README 已知限制),留待后续版本。`Task<T>` 的异常传播已实现。
 
 ## 5. 线程模型与安全边界
 
