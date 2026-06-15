@@ -6,3 +6,4 @@
 #include "coro/when.h"
 #include "coro/future.h"
 #include "coro/iodevice.h"
+#include "coro/process.h"
