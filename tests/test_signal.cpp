@@ -10,6 +10,7 @@ signals:
     void noArg();
     void oneArg(int v);
     void twoArg(int a, const QString& b);
+    void threeArg(int a, const QString& b, double c);
 };
 
 class TestSignal : public QObject {
@@ -45,6 +46,53 @@ private slots:
         coro::exec();
         QCOMPARE(a, 5);
         QCOMPARE(b, QStringLiteral("hi"));
+    }
+
+    void awaitFirstOfTwo() {
+        Emitter e;
+        int got = -1;
+        coro::launch([&]{ got = coro::await<1>(&e, &Emitter::twoArg); coro::quit(); });
+        QTimer::singleShot(10, [&]{ emit e.twoArg(5, QStringLiteral("hi")); });
+        coro::exec();
+        QCOMPARE(got, 5);
+    }
+
+    void awaitZeroOfTwo() {
+        Emitter e;
+        bool woke = false;
+        coro::launch([&]{ coro::await<0>(&e, &Emitter::twoArg); woke = true; coro::quit(); });
+        QTimer::singleShot(10, [&]{ emit e.twoArg(5, QStringLiteral("hi")); });
+        coro::exec();
+        QVERIFY(woke);
+    }
+
+    void awaitFirstTwoOfThree() {
+        Emitter e;
+        int a = -1; QString b;
+        coro::launch([&]{
+            auto t = coro::await<2>(&e, &Emitter::threeArg);   // std::tuple<int,QString>
+            a = std::get<0>(t); b = std::get<1>(t);
+            coro::quit();
+        });
+        QTimer::singleShot(10, [&]{ emit e.threeArg(1, QStringLiteral("x"), 3.14); });
+        coro::exec();
+        QCOMPARE(a, 1);
+        QCOMPARE(b, QStringLiteral("x"));
+    }
+
+    void awaitAllOfThree() {
+        Emitter e;
+        int a = -1; QString b; double c = 0;
+        coro::launch([&]{
+            auto t = coro::await<3>(&e, &Emitter::threeArg);   // std::tuple<int,QString,double>
+            a = std::get<0>(t); b = std::get<1>(t); c = std::get<2>(t);
+            coro::quit();
+        });
+        QTimer::singleShot(10, [&]{ emit e.threeArg(7, QStringLiteral("y"), 2.5); });
+        coro::exec();
+        QCOMPARE(a, 7);
+        QCOMPARE(b, QStringLiteral("y"));
+        QCOMPARE(c, 2.5);
     }
 };
 
