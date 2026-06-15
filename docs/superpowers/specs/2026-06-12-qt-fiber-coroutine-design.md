@@ -48,6 +48,12 @@ int exec() {
 
 跨边界要点:`promise.set_value` 由主 fiber 调用(也是一个 fiber),对单线程默认调度器是安全操作。
 
+### 驱动不变式修正(实现期发现)
+
+最初设想"每次主 fiber 的 `yield()` 返回时,其余协程要么阻塞、要么结束"。但当一个协程因**另一个 fiber 完成**(而非 Qt 事件)而变就绪时(典型:`await(Task)` 等待的 `async` 协程跑完并 `set_value`),该唤醒发生在纯 fiber 调度阶段、不经过 `processEvents`。此时主 fiber 可能已(或即将)停在 `processEvents(WaitForMoreEvents)`,导致就绪协程被饿死、线程永久阻塞。
+
+修正:**协程完成时主动唤醒 Qt 事件分发器**。`coro::async` 把协程体包一层,在体退出(正常返回或异常展开)时经 RAII `DriverWaker` 调用 `eventDispatcher()->wakeUp()`,产生一个粘性 pending-wake,使随后的 `processEvents` 立即返回 → 驱动循环再 `yield()` → 就绪协程恢复。该机制对调度器就绪队列的任意顺序都成立。信号/定时器/QFuture/QIODevice 的唤醒因来自 `processEvents` 内部,天然不需此处理。
+
 ### 已知限制
 
 - **嵌套 Qt 事件循环**(如 `QDialog::exec()`、`QMessageBox::exec()`)期间,主 fiber 被卡在嵌套 `exec()` 内,协程 fiber 不会轮转。本期作为文档说明的已知限制,不在范围内解决。
