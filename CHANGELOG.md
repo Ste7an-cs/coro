@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Added — 信号 await 支持取前 K 个参数
+
+- **`coro::await<K>(obj, &T::signal)`**:模仿 Qt"槽可少于信号参数"的语义,只取信号前 K 个参数
+  (`K=0`→void,`1`→值,`N`→tuple);默认 `await(obj, signal)`(取全部)保持不变、向后兼容。
+  `K` 为显式非类型模板参数,与默认重载无歧义;`K` 超过信号参数个数触发 `static_assert`。
+- `test_signal` 新增 4 个用例(`await<1>`/`await<0>`/`await<2>`/`await<3>`)。
+
 ### Added — 网络/进程适配器
 
 - **`coro::await(QProcess*)`**(`coro/process.h`,已并入伞头文件 `coro/coro.h`):等待进程

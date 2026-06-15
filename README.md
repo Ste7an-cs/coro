@@ -29,7 +29,8 @@ return coro::exec();   // 取代 app.exec()
 
 - `coro::exec()` / `coro::quit(code)` — 主循环。
 - `coro::launch(fn)` / `coro::async(fn) -> Task<T>` — 启动协程。
-- `coro::await(obj, &T::signal)` — 等信号(0→void,1→值,N→tuple)。
+- `coro::await(obj, &T::signal)` — 等信号,返回全部参数(0→void,1→值,N→tuple)。
+- `coro::await<K>(obj, &T::signal)` — 只取信号前 K 个参数(模仿 Qt 槽可少于信号参数);`K=0`→void。
 - `coro::sleep(ms)` — 挂起当前协程。
 - `coro::await(QFuture<T>)` / `coro::await(QIODevice*)` — 适配器。
 - `coro::await(QProcess*)` — 等进程结束,返回退出码(`#include <coro/process.h>`,已在伞头文件中)。

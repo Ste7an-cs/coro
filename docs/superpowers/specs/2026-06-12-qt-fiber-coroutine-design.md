@@ -116,6 +116,7 @@ namespace coro {
 ## 4. 各适配器实现要点
 
 - **signal**:`connect` 单次,回调内 `set_value` 后 `disconnect`;按信号参数个数萃取返回类型(0→void,1→值,N→tuple)。连接方式默认 `Qt::AutoConnection`(同线程即 Direct)。
+  - **取前 K 个参数**(后续新增):`await<K>(obj, signal)`(`K` 为显式非类型模板参数)只返回信号前 K 个(decay 后)参数,模仿 Qt"槽可少于信号参数"的规则;`K=0`→void。内部仍连接信号完整参数 lambda,只转发前 K 个;`static_assert(K<=N)` 防止越界。与默认全参重载靠"显式非类型实参 vs 类型实参"消歧,无歧义、向后兼容。
 - **timer / sleep**:`QTimer::singleShot(ms, &resume)` → 恢复 fiber。
 - **QFuture<T>**:栈上 `QFutureWatcher<T>` watcher,`setFuture(f)`,connect `finished` → `set_value(watcher.result())`;若已 finished 则立即取值,避免错过信号。
 - **QIODevice**:connect `readyRead`(并连接错误/关闭信号以便抛错或返回);单次唤醒。
