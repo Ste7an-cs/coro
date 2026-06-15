@@ -6,3 +6,4 @@ endfunction()
 
 add_qfcoro_test(test_driver)
 add_qfcoro_test(test_sleep)
+add_qfcoro_test(test_signal)
