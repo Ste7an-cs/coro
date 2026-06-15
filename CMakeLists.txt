@@ -18,3 +18,4 @@ target_link_libraries(qfcoro PUBLIC Qt5::Core Boost::fiber Boost::context)
 
 enable_testing()
 add_subdirectory(tests)
+add_subdirectory(examples)
