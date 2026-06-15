@@ -1,0 +1,7 @@
+function(add_qfcoro_test name)
+  add_executable(${name} ${name}.cpp)
+  target_link_libraries(${name} PRIVATE qfcoro Qt5::Core Qt5::Test Qt5::Concurrent)
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+add_qfcoro_test(test_driver)
