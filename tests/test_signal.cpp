@@ -51,26 +51,18 @@ private slots:
     void awaitFirstOfTwo() {
         Emitter e;
         int got = -1;
-        coro::launch([&]{ got = coro::await<1>(&e, &Emitter::twoArg); coro::quit(); });
+        coro::launch([&]{ got = coro::await<int>(&e, &Emitter::twoArg); coro::quit(); });
         QTimer::singleShot(10, [&]{ emit e.twoArg(5, QStringLiteral("hi")); });
         coro::exec();
         QCOMPARE(got, 5);
     }
 
-    void awaitZeroOfTwo() {
-        Emitter e;
-        bool woke = false;
-        coro::launch([&]{ coro::await<0>(&e, &Emitter::twoArg); woke = true; coro::quit(); });
-        QTimer::singleShot(10, [&]{ emit e.twoArg(5, QStringLiteral("hi")); });
-        coro::exec();
-        QVERIFY(woke);
-    }
-
-    void awaitFirstTwoOfThree() {
+    // 指定前两个形参类型:返回 std::tuple<int, QString>
+    void awaitFirstTwoOfThreeTyped() {
         Emitter e;
         int a = -1; QString b;
         coro::launch([&]{
-            auto t = coro::await<2>(&e, &Emitter::threeArg);   // std::tuple<int,QString>
+            auto t = coro::await<int, QString>(&e, &Emitter::threeArg);
             a = std::get<0>(t); b = std::get<1>(t);
             coro::quit();
         });
@@ -80,11 +72,12 @@ private slots:
         QCOMPARE(b, QStringLiteral("x"));
     }
 
-    void awaitAllOfThree() {
+    // 指定全部三个形参类型
+    void awaitAllOfThreeTyped() {
         Emitter e;
         int a = -1; QString b; double c = 0;
         coro::launch([&]{
-            auto t = coro::await<3>(&e, &Emitter::threeArg);   // std::tuple<int,QString,double>
+            auto t = coro::await<int, QString, double>(&e, &Emitter::threeArg);
             a = std::get<0>(t); b = std::get<1>(t); c = std::get<2>(t);
             coro::quit();
         });
@@ -93,6 +86,16 @@ private slots:
         QCOMPARE(a, 7);
         QCOMPARE(b, QStringLiteral("y"));
         QCOMPARE(c, 2.5);
+    }
+
+    // 形参类型可与信号参数转换:信号发 int(7),形参指定 double → 返回 7.0
+    void awaitConvertedTyped() {
+        Emitter e;
+        double got = 0;
+        coro::launch([&]{ got = coro::await<double>(&e, &Emitter::oneArg); coro::quit(); });
+        QTimer::singleShot(10, [&]{ emit e.oneArg(7); });
+        coro::exec();
+        QCOMPARE(got, 7.0);
     }
 };
 
