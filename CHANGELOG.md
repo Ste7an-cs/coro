@@ -7,12 +7,15 @@
 
 ## [Unreleased]
 
-### Added — 信号 await 支持取前 K 个参数
+### Added — 信号 await 按 Qt 槽形参类型取参数
 
-- **`coro::await<K>(obj, &T::signal)`**:模仿 Qt"槽可少于信号参数"的语义,只取信号前 K 个参数
-  (`K=0`→void,`1`→值,`N`→tuple);默认 `await(obj, signal)`(取全部)保持不变、向后兼容。
-  `K` 为显式非类型模板参数,与默认重载无歧义;`K` 超过信号参数个数触发 `static_assert`。
-- `test_signal` 新增 4 个用例(`await<1>`/`await<0>`/`await<2>`/`await<3>`)。
+- **`coro::await<Types...>(obj, &T::signal)`**:像 Qt 槽那样**指定形参类型**,所指定的类型即
+  `await` 的返回类型(`1`→该值,`N`→`std::tuple<Types...>`);默认 `await(obj, signal)`(取全部)
+  保持不变、向后兼容。`Types...` 须对应信号前若干个参数,且可与之做类型转换(如信号 `int` → 取 `double`)。
+  与默认重载靠"显式类型实参 vs 无实参"消歧,无歧义;指定个数超过信号参数个数触发 `static_assert`。
+- `test_signal` 新增用例:`await<int>`、`await<int,QString>`、`await<int,QString,double>`、
+  以及类型转换 `await<double>`(信号发 `int`)。
+- (取代了早先按个数的 `await<K>` 设计。)
 
 ### Added — 网络/进程适配器
 
