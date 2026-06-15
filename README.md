@@ -32,8 +32,13 @@ return coro::exec();   // 取代 app.exec()
 - `coro::await(obj, &T::signal)` — 等信号(0→void,1→值,N→tuple)。
 - `coro::sleep(ms)` — 挂起当前协程。
 - `coro::await(QFuture<T>)` / `coro::await(QIODevice*)` — 适配器。
+- `coro::await(QProcess*)` — 等进程结束,返回退出码(`#include <coro/process.h>`,已在伞头文件中)。
+- `coro::await(QNetworkReply*)` — 等网络请求完成(**opt-in**:`#include <coro/network.h>` 且链接 `Qt5::Network`,不在伞头文件中)。
 - `coro::whenAll(...)` / `coro::whenAny(...)` — 组合。
 - `Task<T>::get()` / `then(cb)` / `done()` / `wait()` — 句柄。
+
+> `coro/coro.h` 伞头文件聚合除网络外的全部适配器。`await(QNetworkReply*)` 因依赖 `Qt5::Network`
+> 设计为可选:需显式 `#include <coro/network.h>` 并在 CMake 中链接 `Qt5::Network`。
 
 ## 已知限制
 

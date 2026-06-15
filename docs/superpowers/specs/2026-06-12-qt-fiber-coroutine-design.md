@@ -181,4 +181,9 @@ coro/
 ## 9. 范围与非目标(YAGNI)
 
 - 本期范围:信号、定时器/sleep、QFuture、QIODevice、Task/async/when 组合、单线程泵驱动。
-- 非目标(后续):QNetworkReply、QProcess、QDBus、多线程/worker、自定义调度器、嵌套事件循环兼容。
+- 非目标(后续):QDBus、多线程/worker、自定义调度器、嵌套事件循环兼容。
+
+### 后续已实现(同模式扩展)
+
+- **QProcess**(`coro/process.h`,Qt5::Core,已并入伞头文件):`int await(QProcess*)` 等 `finished(int,ExitStatus)`、返回退出码。进程输出读取复用 `await(QIODevice*)`。
+- **QNetworkReply**(`coro/network.h`,需 Qt5::Network,**opt-in** 不在伞头文件):`void await(QNetworkReply*)` 等 `finished`(出错也会触发,返回后由调用者 `readAll()`/查 `error()`),含 `isFinished()` 早退守卫。

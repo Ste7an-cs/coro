@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### Added — 网络/进程适配器
+
+- **`coro::await(QProcess*)`**(`coro/process.h`,已并入伞头文件 `coro/coro.h`):等待进程
+  `finished(int, ExitStatus)`,返回退出码。进程输出读取复用 `await(QIODevice*)`。
+- **`coro::await(QNetworkReply*)`**(`coro/network.h`,**opt-in**,需链接 `Qt5::Network`,
+  不在伞头文件中):等待 `finished`(出错时也会触发),返回后由调用者 `readAll()` / 查 `error()`;
+  含 `isFinished()` 早退守卫。
+- 新增测试 `test_process`、`test_network`(后者用 `file://` URL 离线确定性验证);全量 9 个测试套件通过。
+
 ### Added — 0.1.0 首个实现(基于 Boost.Fiber 的 Qt 协程库)
 
 - **核心驱动**:单线程"泵驱动"模型。`coro::exec()` 取代 `app.exec()`,交替
