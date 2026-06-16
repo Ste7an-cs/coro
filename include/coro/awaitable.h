@@ -60,7 +60,7 @@ template<class T>
 class awaitable {
 public:
     static_assert(std::is_default_constructible_v<T>,
-                  "awaitable<T>: T 必须可默认构造(unbuffered_channel::pop 的要求)");
+                  "awaitable<T>: T 必须可默认构造(await() 内 'T v;' 的要求,与 unbuffered_channel 无关)");
     awaitable() = default;
     awaitable(const awaitable&) = delete;
     awaitable& operator=(const awaitable&) = delete;

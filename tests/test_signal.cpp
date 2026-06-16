@@ -111,6 +111,20 @@ private slots:
         coro::exec();
         QVERIFY(threw);
     }
+
+    // 同上,但走 await<Types...> 的 typed 路径(await_typed_impl 的关闭守卫)
+    void closedThrowsOnDestroyTyped() {
+        bool threw = false;
+        auto* e = new Emitter;
+        coro::launch([&]{
+            try { coro::await<int>(e, &Emitter::oneArg); }
+            catch (const coro::awaitable_closed&) { threw = true; }
+            coro::quit();
+        });
+        QTimer::singleShot(10, [&]{ delete e; });
+        coro::exec();
+        QVERIFY(threw);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSignal)

@@ -19,6 +19,7 @@ private slots:
         QVERIFY(!c.has_value());
         QVERIFY(c.closed());
         QVERIFY(!static_cast<bool>(c));
+        QVERIFY_EXCEPTION_THROWN(c.value(), coro::awaitable_closed);  // closed → value() 抛
 
         auto vv = coro::result<void>::value();
         QVERIFY(vv.has_value());
@@ -96,6 +97,34 @@ private slots:
         });
         coro::exec();
         QVERIFY(!resolveOk);
+    }
+
+    // 先 close 再 await:pop 在已关闭的空通道上应立即返回 closed(不阻塞)
+    void awaitAfterClose() {
+        auto aw = std::make_shared<coro::awaitable<int>>();
+        bool gotClosed = false;
+        coro::launch([&, aw]{
+            aw->close();
+            auto r = aw->await();
+            gotClosed = r.closed();
+            coro::quit();
+        });
+        coro::exec();
+        QVERIFY(gotClosed);
+    }
+
+    // awaitable<void> 的 close 也应唤醒等待者并得到 closed()
+    void voidCloseWakesAwaiter() {
+        auto aw = std::make_shared<coro::awaitable<void>>();
+        bool gotClosed = false;
+        coro::launch([&, aw]{
+            auto r = aw->await();
+            gotClosed = r.closed();
+            coro::quit();
+        });
+        QTimer::singleShot(10, [aw]{ aw->close(); });
+        coro::exec();
+        QVERIFY(gotClosed);
     }
 };
 

@@ -55,7 +55,7 @@ auto await_signal_impl(Obj* obj, Sig sig, std::tuple<A...>*) {
 
 // 用接收到的信号前 K 个参数构造结果(各自转换为对应 Want 形参类型)
 template<class R, class... Want, class Tuple, std::size_t... I>
-R make_typed(Tuple& t, std::index_sequence<I...>) {
+R make_typed(const Tuple& t, std::index_sequence<I...>) {
     return R(static_cast<std::decay_t<Want>>(std::get<I>(t))...);
 }
 
