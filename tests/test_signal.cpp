@@ -97,6 +97,20 @@ private slots:
         coro::exec();
         QCOMPARE(got, 7.0);
     }
+
+    // 等待期间对象被销毁:连接 lambda 析构 → awaitable 关闭 → await 抛 awaitable_closed
+    void closedThrowsOnDestroy() {
+        bool threw = false;
+        auto* e = new Emitter;
+        coro::launch([&]{
+            try { coro::await(e, &Emitter::oneArg); }
+            catch (const coro::awaitable_closed&) { threw = true; }
+            coro::quit();
+        });
+        QTimer::singleShot(10, [&]{ delete e; });
+        coro::exec();
+        QVERIFY(threw);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSignal)

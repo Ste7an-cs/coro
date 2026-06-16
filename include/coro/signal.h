@@ -4,12 +4,12 @@
 #include <memory>
 #include <utility>
 #include <QObject>
-#include <boost/fiber/all.hpp>
+#include "coro/awaitable.h"
 
 namespace coro {
 namespace detail {
 
-// 从信号指针(指向成员函数)萃取参数类型(decay 去引用/const)
+// 从信号指针萃取参数类型(decay 去引用/const)
 template<class T> struct signal_args;
 template<class C, class R, class... A>
 struct signal_args<R (C::*)(A...)> { using type = std::tuple<std::decay_t<A>...>; };
@@ -27,34 +27,39 @@ template<> struct pack_result<> {                    // 0 个 → void
     using type = void;
 };
 
-// 默认:取信号全部参数
+// 默认:取信号全部参数,经由 awaitable<R> 传递
 template<class Obj, class Sig, class... A>
 auto await_signal_impl(Obj* obj, Sig sig, std::tuple<A...>*) {
     using PR = pack_result<A...>;
     using R  = typename PR::type;
 
-    auto pr   = std::make_shared<boost::fibers::promise<R>>();
-    auto fut  = pr->get_future();
-    auto conn = std::make_shared<QMetaObject::Connection>();
+    auto aw    = std::make_shared<awaitable<R>>();
+    auto conn  = std::make_shared<QMetaObject::Connection>();
+    // 关闭守卫:连接 lambda 析构(对象销毁/断连)即关闭 awaitable,
+    // 复刻旧 promise 版"对象销毁 → broken_promise"的抛出行为。
+    auto guard = std::shared_ptr<void>(static_cast<void*>(nullptr),
+                                       [aw](void*){ aw->close(); });
 
-    *conn = QObject::connect(obj, sig, [pr, conn](A... a) {
+    *conn = QObject::connect(obj, sig, [aw, conn, guard](A... a) {
         QObject::disconnect(*conn);           // 单次触发
-        if constexpr (std::is_void_v<R>) pr->set_value();
-        else                             pr->set_value(PR::make(a...));
+        if constexpr (std::is_void_v<R>) aw->resolve();
+        else                             aw->resolve(PR::make(a...));
     });
+    guard.reset();   // 仅让 lambda 持有守卫引用,避免本地变量阻止析构触发
 
-    if constexpr (std::is_void_v<R>) { fut.get(); }
-    else                            { return fut.get(); }
+    auto r = aw->await();
+    if (r.closed()) throw awaitable_closed("coro::await(signal): awaitable closed");
+    if constexpr (std::is_void_v<R>) { return; }
+    else { return std::move(r).value(); }
 }
 
-// 用接收到的信号前 sizeof...(Want) 个参数构造结果(各自转换为对应的 Want 形参类型)
+// 用接收到的信号前 K 个参数构造结果(各自转换为对应 Want 形参类型)
 template<class R, class... Want, class Tuple, std::size_t... I>
-void set_typed(boost::fibers::promise<R>& pr, Tuple& t, std::index_sequence<I...>) {
-    pr.set_value(R(static_cast<std::decay_t<Want>>(std::get<I>(t))...));
+R make_typed(Tuple& t, std::index_sequence<I...>) {
+    return R(static_cast<std::decay_t<Want>>(std::get<I>(t))...);
 }
 
 // 指定形参类型 Want...(像 Qt 槽的形参列表):返回 pack_result<Want...>。
-// Want... 须是信号前若干个参数且可隐式/static_cast 转换,模仿"槽形参可少于信号参数"。
 template<class Obj, class Sig, class... Want, class... A>
 auto await_typed_impl(Obj* obj, Sig sig, std::tuple<Want...>*, std::tuple<A...>*) {
     constexpr std::size_t K = sizeof...(Want);
@@ -62,16 +67,21 @@ auto await_typed_impl(Obj* obj, Sig sig, std::tuple<Want...>*, std::tuple<A...>*
     static_assert(K <= N, "coro::await<Types...>(obj, signal): 指定的形参个数超过信号参数个数");
     using R = typename pack_result<std::decay_t<Want>...>::type;   // K>=1 → 值 / tuple
 
-    auto pr   = std::make_shared<boost::fibers::promise<R>>();
-    auto fut  = pr->get_future();
-    auto conn = std::make_shared<QMetaObject::Connection>();
+    auto aw    = std::make_shared<awaitable<R>>();
+    auto conn  = std::make_shared<QMetaObject::Connection>();
+    auto guard = std::shared_ptr<void>(static_cast<void*>(nullptr),
+                                       [aw](void*){ aw->close(); });
 
-    *conn = QObject::connect(obj, sig, [pr, conn](A... a) {
+    *conn = QObject::connect(obj, sig, [aw, conn, guard](A... a) {
         QObject::disconnect(*conn);
         std::tuple<std::decay_t<A>...> all{ a... };
-        set_typed<R, Want...>(*pr, all, std::make_index_sequence<K>{});
+        aw->resolve(make_typed<R, Want...>(all, std::make_index_sequence<K>{}));
     });
-    return fut.get();
+    guard.reset();   // 仅让 lambda 持有守卫引用
+
+    auto r = aw->await();
+    if (r.closed()) throw awaitable_closed("coro::await<Types...>(signal): awaitable closed");
+    return std::move(r).value();
 }
 
 } // namespace detail
