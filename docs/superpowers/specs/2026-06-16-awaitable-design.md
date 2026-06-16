@@ -139,6 +139,11 @@ private:
 - 唯一会阻塞的情况:**没有任何 await 等待、且未来也不会有时调用 `resolve()`** ——
   这是 unbuffered 的固有契约。信号用例不触发此情况;通用使用需调用方保证有等待者。
 
+**生产者必须事件循环驱动(实现期发现)**:`resolve()`/`close()` 必须从 Qt 事件回调
+(`QTimer`、信号槽)调用。若改由另一个忙等协程作生产者(`launch` 里 `for` 循环 resolve),
+握手后驱动 fiber 可能在仍有就绪消费者协程时进入 `processEvents(WaitForMoreEvents)`
+阻塞,饿死该消费者 → 死锁。awaitable 的目标用例(信号槽内 resolve)天然满足此约束。
+
 ## 5. 信号适配器迁移
 
 `include/coro/signal.h` 中 `await_signal_impl` / `await_typed_impl` 的改动:

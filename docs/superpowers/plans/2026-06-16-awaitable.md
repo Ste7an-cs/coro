@@ -236,7 +236,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
             got = r.value();
             coro::quit();
         });
-        coro::launch([aw]{ aw->resolve(42); });
+        QTimer::singleShot(10, [aw]{ aw->resolve(42); });
         coro::exec();
         QCOMPARE(got, 42);
     }
@@ -245,9 +245,15 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 并在文件顶部补充包含:
 
 ```cpp
+#include <QTimer>
 #include <coro/core.h>
 #include <memory>
 ```
+
+> **重要(单线程泵约束)**:`resolve()`/`close()` 必须由 **Qt 事件循环驱动**
+> (如 `QTimer::singleShot`、信号槽),**不能**用另一个忙等协程作生产者。否则
+> `coro::exec()` 的驱动 fiber 会阻塞在 `processEvents(WaitForMoreEvents)`,而就绪的
+> 消费者协程得不到调度,形成死锁。此模式与 `test_signal.cpp` 一致。
 
 - [ ] **Step 2: 运行,确认失败前先确认它能编译并跑过**
 
@@ -287,9 +293,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
             }
             coro::quit();
         });
-        coro::launch([aw]{
-            for (int i = 0; i < 3; ++i) aw->resolve(i * 10);
-        });
+        QTimer::singleShot(10, [aw]{ aw->resolve(0); });
+        QTimer::singleShot(20, [aw]{ aw->resolve(10); });
+        QTimer::singleShot(30, [aw]{ aw->resolve(20); });
         coro::exec();
         QCOMPARE(got.size(), std::size_t(3));
         QCOMPARE(got[0], 0);
@@ -334,7 +340,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
             woke = r.has_value();
             coro::quit();
         });
-        coro::launch([aw]{ aw->resolve(); });
+        QTimer::singleShot(10, [aw]{ aw->resolve(); });
         coro::exec();
         QVERIFY(woke);
     }
@@ -374,7 +380,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
             gotClosed = r.closed();
             coro::quit();
         });
-        coro::launch([aw]{ aw->close(); });
+        QTimer::singleShot(10, [aw]{ aw->close(); });
         coro::exec();
         QVERIFY(gotClosed);
     }
@@ -623,3 +629,7 @@ Expected: 推送成功。
 - `unbuffered_channel::pop(T&)` 要求 `T` 可默认构造;信号实参经 `std::decay_t` 后均满足,`void` 路径用 `std::monostate`。
 - 关闭守卫用 `std::shared_ptr<void>` + 自定义删除器:连接 lambda 是其唯一持有者,lambda 析构即触发 `close()`。
 - 本轮仅迁移信号适配器;future/iodevice/process/network 维持现有 promise/future 实现。
+- **生产者必须事件循环驱动**:单线程泵下,`resolve()`/`close()` 要从 Qt 事件回调
+  (`QTimer`、信号槽)调用,不能由忙等协程作生产者(会阻塞驱动 fiber 的
+  `processEvents`,饿死就绪的消费者协程)。awaitable 的目标用例(信号槽内 resolve)
+  天然满足。测试 Task 2-5 因此合并为一次提交(同一文件、统一改为事件循环驱动)。
