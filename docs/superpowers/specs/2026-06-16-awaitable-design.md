@@ -152,10 +152,14 @@ private:
 - 连接 lambda 中:`if (void) aw->resolve(); else aw->resolve(PR::make(a...));`,
   随后 `disconnect`(单次触发,语义不变)。
 - **关闭守卫(保留今日 broken_promise 语义)**:由于 awaitable 由 lambda 与等待协程
-  共享 shared_ptr,仅销毁 lambda 不会关闭通道。lambda 额外捕获一个 RAII 守卫,其析构
-  调用 `aw->close()`。于是:对象被销毁 / 连接被移除 ⇒ lambda 连同守卫析构 ⇒ 通道关闭
-  ⇒ 等待中的 `await()` 立即得到 `closed()` ⇒ 抛异常。这复刻了今日「promise 被销毁
-  ⇒ `future.get()` 抛 broken_promise」的行为(否则协程会永久挂起)。
+  共享 shared_ptr,仅销毁 lambda 不会关闭通道。lambda 额外捕获一个 RAII 守卫
+  (`std::shared_ptr<void>` + 自定义删除器),其析构调用 `aw->close()`。于是:对象被
+  销毁 / 连接被移除 ⇒ lambda 连同守卫析构 ⇒ 通道关闭 ⇒ 等待中的 `await()` 立即得到
+  `closed()` ⇒ 抛异常。这复刻了今日「promise 被销毁 ⇒ `future.get()` 抛 broken_promise」
+  的行为(否则协程会永久挂起)。
+  **关键(实现期发现)**:`connect` 后必须 `guard.reset()` 丢弃**本地**的守卫引用,
+  使 lambda 成为守卫的唯一持有者。否则有栈协程挂起期间本地 `guard` 变量始终存活
+  (引用计数 ≥ 2),Qt 销毁 lambda 时删除器不触发,`close()` 永不调用,协程永久挂起。
 - 等待:`auto r = aw->await();`
   - `r.has_value()` ⇒ 返回 `std::move(r).value()`(void 则直接返回)。
   - `r.closed()`    ⇒ 抛异常(见 §7)。

@@ -456,8 +456,7 @@ Expected: FAIL —— 旧实现 `coro::awaitable_closed` 未定义(编译错误)
 #include <memory>
 #include <utility>
 #include <QObject>
-#include <boost/fiber/all.hpp>
-#include "coro/awaitable.h"
+#include "coro/awaitable.h"   // 已含 <boost/fiber/all.hpp>;signal.h 不再直接用 boost::fibers
 
 namespace coro {
 namespace detail {
@@ -498,6 +497,7 @@ auto await_signal_impl(Obj* obj, Sig sig, std::tuple<A...>*) {
         if constexpr (std::is_void_v<R>) aw->resolve();
         else                             aw->resolve(PR::make(a...));
     });
+    guard.reset();   // 仅让 lambda 持有守卫引用,避免本地变量阻止析构触发 close()
 
     auto r = aw->await();
     if (r.closed()) throw awaitable_closed("coro::await(signal): awaitable closed");
@@ -529,6 +529,7 @@ auto await_typed_impl(Obj* obj, Sig sig, std::tuple<Want...>*, std::tuple<A...>*
         std::tuple<std::decay_t<A>...> all{ a... };
         aw->resolve(make_typed<R, Want...>(all, std::make_index_sequence<K>{}));
     });
+    guard.reset();   // 仅让 lambda 持有守卫引用
 
     auto r = aw->await();
     if (r.closed()) throw awaitable_closed("coro::await<Types...>(signal): awaitable closed");
