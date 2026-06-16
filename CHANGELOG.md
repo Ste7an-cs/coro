@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### Added — awaitable<T> 异步数据同步原语
+
+- **`coro::awaitable<T>`**(`coro/awaitable.h`,已并入伞头文件):基于
+  `boost::fibers::unbuffered_channel` 的**可复用** rendezvous 原语。`await()` 取一个值返回
+  `coro::result<T>`(值-或-关闭);`resolve(v)` 提交数据(rendezvous,关闭后返回 `false`);
+  `close()` 关闭通道并唤醒等待者。含 `awaitable<void>` 特化与异常类型 `coro::awaitable_closed`。
+- **信号 await 迁移**:`coro::await(obj, signal)` / `coro::await<Types...>(...)` 底层由
+  `promise/future` 改为 `awaitable<T>` 传递数据;对外返回类型与行为不变。连接 lambda 持有
+  关闭守卫(`connect` 后 `guard.reset()` 使 lambda 独占),对象销毁/断连时关闭 awaitable,
+  使等待中的 `await` 抛 `awaitable_closed`(复刻旧版 `broken_promise`)。
+- 新增测试 `test_awaitable`(基本同步/多次复用/void 特化/close 语义);`test_signal`
+  新增「对象销毁 → 抛 `awaitable_closed`」回归。全量 10 个测试套件通过。
+- 注:`resolve()`/`close()` 须由事件循环驱动(信号槽/`QTimer`),单线程泵下不能用忙等协程作生产者。
+
 ### Added — 信号 await 按 Qt 槽形参类型取参数
 
 - **`coro::await<Types...>(obj, &T::signal)`**:像 Qt 槽那样**指定形参类型**,所指定的类型即

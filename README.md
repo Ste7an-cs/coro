@@ -37,6 +37,7 @@ return coro::exec();   // 取代 app.exec()
 - `coro::await(QNetworkReply*)` — 等网络请求完成(**opt-in**:`#include <coro/network.h>` 且链接 `Qt5::Network`,不在伞头文件中)。
 - `coro::whenAll(...)` / `coro::whenAny(...)` — 组合。
 - `Task<T>::get()` / `then(cb)` / `done()` / `wait()` — 句柄。
+- `coro::awaitable<T>` — 可复用异步数据同步原语(`unbuffered_channel`):`await() -> result<T>`(值/关闭)、`resolve(v)` 提交、`close()` 关闭。`resolve`/`close` 须由事件循环驱动(信号槽/`QTimer`)。信号 `await` 即以此实现。
 
 > `coro/coro.h` 伞头文件聚合除网络外的全部适配器。`await(QNetworkReply*)` 因依赖 `Qt5::Network`
 > 设计为可选:需显式 `#include <coro/network.h>` 并在 CMake 中链接 `Qt5::Network`。
