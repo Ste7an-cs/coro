@@ -61,6 +61,31 @@ public:
         }
     }
 
+    // range-for 支持：迭代器封装 next()，到达流末即等于 end()。
+    class iterator {
+    public:
+        iterator() = default;                                   // end 哨兵
+        explicit iterator(io_byte_generator* g) : g_(g) { advance(); }
+
+        QByteArray& operator*()  { return cur_; }
+        QByteArray* operator->() { return &cur_; }
+        iterator& operator++() { advance(); return *this; }
+        bool operator!=(const iterator& o) const { return done_ != o.done_; }
+        bool operator==(const iterator& o) const { return done_ == o.done_; }
+    private:
+        void advance() {
+            auto r = g_->next();
+            if (r.closed()) { done_ = true; }
+            else { cur_ = std::move(r).value(); done_ = false; }
+        }
+        io_byte_generator* g_ = nullptr;
+        QByteArray cur_;
+        bool done_ = true;
+    };
+
+    iterator begin() { return iterator(this); }
+    iterator end()   { return iterator(); }
+
 private:
     QPointer<QIODevice> dev_;
     bool eos_ = false;

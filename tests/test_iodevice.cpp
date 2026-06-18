@@ -77,6 +77,20 @@ private slots:
         QVERIFY(ended);
         QVERIFY(!threw);
     }
+
+    void rangeForCollects() {
+        SeqDevice dev;
+        QByteArray all;
+        coro::launch([&]{
+            for (QByteArray c : coro::generate(&dev)) all += c;
+            coro::quit();
+        });
+        QTimer::singleShot(10, [&]{ dev.feed("hello "); });
+        QTimer::singleShot(20, [&]{ dev.feed("world"); });
+        QTimer::singleShot(30, [&]{ dev.finish(); });
+        coro::exec();
+        QCOMPARE(all, QByteArray("hello world"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIoDevice)
