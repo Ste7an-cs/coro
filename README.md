@@ -33,6 +33,7 @@ return coro::exec();   // 取代 app.exec()
 - `coro::await<Types...>(obj, &T::signal)` — 像 Qt 槽一样**指定形参类型**,该类型即返回类型(1→值,N→tuple);可少于信号参数、并支持类型转换(如 `await<double>` 取 `int` 参数)。
 - `coro::sleep(ms)` — 挂起当前协程。
 - `coro::await(QFuture<T>)` / `coro::await(QIODevice*)` — 适配器。
+- `coro::generate(QIODevice*)` — 字节块**生成器**:每拉取一次挂起直到下一次 `readyRead`,产出 `readAll()` 的 `QByteArray`;流结束(`readChannelFinished`/设备销毁)正常终止(`closed()`,不抛)。支持 range-for 与显式 `next() -> result<QByteArray>` 两种消费;覆盖 QTcpSocket 等流式设备。
 - `coro::await(QProcess*)` — 等进程结束,返回退出码(`#include <coro/process.h>`,已在伞头文件中)。
 - `coro::await(QNetworkReply*)` — 等网络请求完成(**opt-in**:`#include <coro/network.h>` 且链接 `Qt5::Network`,不在伞头文件中)。
 - `coro::whenAll(...)` / `coro::whenAny(...)` — 组合。

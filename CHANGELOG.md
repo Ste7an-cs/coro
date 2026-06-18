@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### Added — QIODevice 字节块生成器
+
+- **`coro::generate(QIODevice*)`**(`coro/iodevice.h`,已在伞头文件中):返回 move-only 的
+  `coro::io_byte_generator`。`next()` 挂起当前协程直到下一次 `readyRead`,产出 `dev->readAll()`
+  的 `QByteArray`(经 `result<QByteArray>` 传递,值/关闭);每次拉取先排空 `bytesAvailable()`,
+  单线程模型下无边沿丢失。`readChannelFinished` 或设备销毁时**正常**结束(`closed()`,不抛)。
+  支持 range-for 与显式 `next()` 两种消费方式。底层在单次 `awaitable<int>` 上汇合
+  `readyRead`/`readChannelFinished`/`destroyed`,槽内先断开全部连接以避免 rendezvous 二次 push 挂起。
+- 新增测试 `test_iodevice`:`nextYieldsChunks`(逐块)、`destroyEndsClean`(销毁正常终止)、
+  `rangeForCollects`(range-for 收集);采用顺序 `QIODevice` 桩,无网络依赖。
+- 现有 `await(QIODevice*)` 保持不变。
+
 ### Added — awaitable<T> 异步数据同步原语
 
 - **`coro::awaitable<T>`**(`coro/awaitable.h`,已并入伞头文件):基于
