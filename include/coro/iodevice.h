@@ -74,6 +74,7 @@ public:
         bool operator==(const iterator& o) const { return done_ == o.done_; }
     private:
         void advance() {
+            if (!g_) { done_ = true; return; }
             auto r = g_->next();
             if (r.closed()) { done_ = true; }
             else { cur_ = std::move(r).value(); done_ = false; }
