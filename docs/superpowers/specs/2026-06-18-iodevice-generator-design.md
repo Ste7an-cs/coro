@@ -93,22 +93,25 @@ while (auto r = gen.next()) {
 - `include/coro/iodevice.h` —— 新增 `io_byte_generator` 与 `generate()`;保留现有
   `await(QIODevice*)`。需 `#include` `coro/awaitable.h`、`<QPointer>`、`<QByteArray>`。
 - `include/coro/coro.h` —— 确认 `iodevice.h` 已在伞头文件中(现已包含,无需改动)。
-- `tests/test_iodevice.cpp` —— 新增测试(见下)。
-- `tests/CMakeLists.txt` —— `test_iodevice` 已构建;为 QTcpSocket 回环测试可能需链接
-  `Qt5::Network`。
+- `tests/test_iodevice.cpp` —— 新增测试(见下),无需新增依赖。
+- `tests/CMakeLists.txt` —— `test_iodevice` 已构建,无需改动。
 - `CHANGELOG.md` —— 记录新增;随后推送 origin(项目工作流)。
 - `README.md` —— API 章节补充 `coro::generate(QIODevice*)`。
 
 ## 测试方案(TDD)
 
-1. **`next()` over `QBuffer`**:用 `QTimer` 在拉取间隔向 `QBuffer` 写入若干块,断言每次
-   `next()` 取得对应块。
-2. **range-for 收集**:对生成器做 range-for,把所有块拼接,与写入总数据比对。
-3. **`QTcpServer` + `QTcpSocket` 回环**:服务端写入数据后断开连接;生成器先产出数据块,
-   随后迭代自然结束(`readChannelFinished` 路径)。验证真实 socket 的结束语义。
+本库测试不引入网络依赖,故用一个**顺序 `QIODevice` 桩**(`SeqDevice : public QIODevice`,
+`isSequential() == true`)模拟流式设备:测试可向其内部缓冲投递数据并发 `readyRead`,在流末
+显式 `emit readChannelFinished()` 以触发生成器正常结束。
 
-> 说明:`QBuffer::close()` 不发 `readChannelFinished`,故 QBuffer 用例由测试自身在收满
-> 预期块后 `quit()` 结束循环;真实的"流结束"路径由 socket 回环用例覆盖。
+1. **`next()` 逐块**:用 `QTimer` 在拉取间隔向桩设备投递若干块并发 `readyRead`,断言每次
+   `next()` 取得对应块;末尾 `emit readChannelFinished()` 后 `next()` 返回 `closed()`。
+2. **range-for 收集**:对生成器做 range-for,把所有块拼接,与投递总数据比对;`readChannelFinished`
+   触发迭代自然结束。
+3. **设备销毁**:在等待期间销毁桩设备,断言生成器以 `closed()` 正常终止、不抛异常。
+
+> 说明:`QBuffer::close()` 不发 `readChannelFinished`,故采用上述顺序桩设备以确定性地覆盖
+> "流结束"(`readChannelFinished`)与"设备销毁"两条终止路径。
 
 ## 已知限制(沿用本库现状)
 
