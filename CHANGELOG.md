@@ -17,6 +17,9 @@
   `readyRead`/`readChannelFinished`/`destroyed`,槽内先断开全部连接以避免 rendezvous 二次 push 挂起。
 - 新增测试 `test_iodevice`:`nextYieldsChunks`(逐块)、`destroyEndsClean`(销毁正常终止)、
   `rangeForCollects`(range-for 收集);采用顺序 `QIODevice` 桩,无网络依赖。
+- 新增 opt-in 测试 `test_iodevice_socket`(`generateOverTcpSocket`):`QTcpServer`/`QTcpSocket`
+  回环验证生成器在真实 socket 上的逐块产出与断开(`readChannelFinished`)正常终止;链接
+  `Qt5::Network`,与 `test_iodevice` 隔离以保持后者无网络依赖。
 - 现有 `await(QIODevice*)` 保持不变。
 
 ### Added — awaitable<T> 异步数据同步原语
