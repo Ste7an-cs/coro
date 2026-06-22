@@ -8,3 +8,4 @@
 #include "coro/future.h"
 #include "coro/iodevice.h"
 #include "coro/process.h"
+#include "coro/qt_round_robin.h"

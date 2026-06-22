@@ -9,7 +9,7 @@
 
 ### Added — `coro::qt_round_robin` Qt 事件循环 fiber 调度器
 
-- **`coro::qt_round_robin`**(`coro/qt_round_robin.h`,独立头文件,**不**并入伞头文件):仿 boost.fiber
+- **`coro::qt_round_robin`**(`coro/qt_round_robin.h`,已并入伞头文件 `coro/coro.h`):仿 boost.fiber
   官方 `examples/asio/round_robin.hpp` 的 Qt 调度器。**事件循环本身驱动 fiber 调度** —— 主 fiber 经
   `qt_round_robin::run()` 跑 service loop,Qt 事件在该 service-loop fiber(可挂起的普通上下文)里 pump;
   `suspend_until()` 跑在 dispatcher 上下文,**绝不 pump、绝不挂起**,只为 boost.fiber 原生定时等待
@@ -18,10 +18,12 @@
   到期 sleep 的 fiber。这样槽里的 `resolve()`(= `unbuffered_channel::push` 的潜在挂起)发生在 service-loop
   fiber 而非 dispatcher,**根除**了下述诊断出的崩溃类。`run()`/`stop()` 为静态接口(`stop()` 须由调度器线程
   上的 fiber 调用)。
-- 实现要点:`suspend_until()` 的 QTimer 间隔**向上取整**到毫秒 —— 截断(floor)会让 QTimer 早于 fiber 真实
-  唤醒时刻触发,`sleep2ready` 认为未到期、单次 QTimer 又已耗尽 → `processEvents` 永久挂死;`notify()`/`stop()`
-  按 `QThread*` 重新查询 dispatcher 而非缓存指针 —— 退出期 `QCoreApplication` 先析构,缓存指针会悬空导致
-  收尾时 use-after-free。
+- 实现要点(三个易踩的坑):
+  - suspend QTimer 须用 **`Qt::PreciseTimer`**:默认 `Qt::CoarseTimer` 可提前至多 5% 触发,早于 fiber 真实
+    `steady_clock` 唤醒时刻 → `sleep2ready` 判未到期不唤醒、单次 QTimer 已耗尽 → 永久挂死(间歇性 hang 根因)。
+  - QTimer 间隔**向上取整**到毫秒 —— 截断(floor)同样会让 QTimer 早于 deadline 触发,后果同上。
+  - `notify()`/`stop()` 按 `QThread*` **重新查询** dispatcher 而非缓存指针 —— 退出期 `QCoreApplication` 先析构,
+    缓存指针会悬空导致收尾时 use-after-free。
 - 新增测试 `test_round_robin`:(a) `QTimer` 唤醒推进原生 `sleep_for` 挂起的 fiber;(b) 槽里 `resolve` 一个
   park 着的 fiber 不崩;(c) `std::thread` 跨线程 `resolve` 唤醒 park 着的 fiber。
 - 设计文档:`docs/superpowers/specs/2026-06-22-qt-round-robin-design.md`。

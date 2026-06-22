@@ -40,6 +40,10 @@ public:
         // 重新查询 dispatcher:线程/应用拆除后查询返回 nullptr,安全跳过。
         thread_ = QThread::currentThread();
         suspend_timer_.setSingleShot(true);
+        // 必须 PreciseTimer:默认 Qt::CoarseTimer 可提前至多 5% 触发,会早于 fiber 的真实
+        // steady_clock 唤醒时刻,届时 sleep2ready 判定 sleeper 未到期、不唤醒它,而单次 QTimer
+        // 已耗尽 → processEvents 永久挂死(timerWakesFiber 间歇性 hang 的根因)。
+        suspend_timer_.setTimerType(Qt::PreciseTimer);
         instance_ptr() = this;
     }
     qt_round_robin(const qt_round_robin&) = delete;
