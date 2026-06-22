@@ -9,19 +9,22 @@
 
 ### Added — `coro::sync_channel` / `coro::sync_awaitable`(跨线程、可在非 fiber 线程使用)
 
-- **`coro::sync_channel<T>`**(`coro/sync_channel.h`):跨线程安全的 rendezvous(unbuffered,容量 0)通道。
-  与 `boost::fibers::unbuffered_channel` 不同,`push`/`pop` 用 `std::mutex` + `std::condition_variable`
+- **`coro::sync_channel<T>`**(`coro/sync_channel.h`):跨线程安全的【缓冲】通道(无界 FIFO,`std::queue` 支撑)。
+  与 `boost::fibers::buffered_channel` 不同,`push`/`pop` 用 `std::mutex` + `std::condition_variable`
   阻塞 **OS 线程**,而非 `active_ctx->suspend()` 挂起 fiber —— 因此可在【任意上下文】调用,包括**非 fiber
   线程**(普通 `std::thread`、跑 Qt 事件循环的主线程的槽里),不依赖 fiber 调度器被驱动。设计参照 boost.fiber
-  future 的 `shared_state`(mtx+cv+ready 标志+值存储),把一次性的 future 推广为可复用的 rendezvous 交接。
-  语义与 unbuffered_channel 对齐(`push` 放值后阻塞至被取走;`pop` 阻塞至有值;`close()` 后 `push` 返回
-  `closed`、空 `pop` 返回 `closed`)。`push_seq_`/`taken_seq_` 计数确保被唤醒的生产者确认的是**自己**那次的
-  值已被取走(否则新生产者补槽会让已被消费的生产者误等)。**约束**:生产者/消费者须在不同 OS 线程;
-  同线程 fiber↔fiber 交接仍用 boost 的 fiber channel(阻塞 OS 线程会冻结调度器 → 死锁)。
+  future 的 `shared_state`(mtx+cv+状态),把单值/一次性推广为一条 FIFO 队列的可复用交接。
+  语义:`push` 把值【入队后立即返回 `success`】(不等待消费,可连续放入多个元素并被缓冲);`pop` 阻塞至队列
+  非空,按 FIFO 取出;`close()` 后 `push` 返回 `closed`,`pop` 先把队列里【剩余元素取尽】、空后才返回 `closed`。
+  多生产者/多消费者均安全。若需背压(有界、满时 `push` 阻塞),在 `push` 里加一个 `not_full_` 条件等待即可;
+  本实现暂为无界。**约束**:不要在「与生产者同一线程的 fiber」里 `pop` 空通道 —— 阻塞 OS 线程会冻结整个 fiber
+  调度器 → 死锁;同线程 fiber↔fiber 交接仍用 boost 的 fiber channel,跨线程消费才是它的用途。
 - **`coro::sync_awaitable<T>` / `sync_awaitable<void>`**(`coro/awaitable.h`):底层换成 `sync_channel` 的
-  awaitable,接口与 `result<T>` 语义同 `awaitable<T>`,但 `await()`/`resolve()` 可在非 fiber 线程调用。
-- 新增测试 `test_sync_awaitable`:消费者在普通 `std::thread`(非 fiber)上 `await`、主线程 `resolve`
-  (rendezvous);多次复用;`close()` 唤醒阻塞的 `await` → `closed`;关闭后 `resolve` 返回 false;void 特化。
+  awaitable,接口与 `result<T>` 语义同 `awaitable<T>`,但 `resolve()` 入队即返回(可连续放多个)、
+  `await()`/`resolve()` 可在非 fiber 线程调用;`close()` 后 `await()` 先取尽队列剩余元素、空后才得到 `closed()`。
+- 新增测试 `test_sync_awaitable`:消费者在普通 `std::thread`(非 fiber)上 `await`、主线程 `resolve`;
+  无消费者时单线程连续 `resolve` 多个元素再依次 `await` 取出(验证缓冲 FIFO);多次复用;`close()` 唤醒阻塞的
+  `await` → `closed`;关闭后 `resolve` 返回 false;void 特化。
   另有纯 `std` 的 TSan/ASan 压测(`scratch/`)验证跨线程顺序、多生产者计数守恒、close 唤醒。
 
 ### Added — `coro::qt_round_robin` Qt 事件循环 fiber 调度器

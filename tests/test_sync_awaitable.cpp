@@ -25,14 +25,27 @@ private slots:
             if (hasVal) got = r.value();
         });
         std::this_thread::sleep_for(20ms);   // 让 consumer 先 park 在 await
-        bool ok = aw->resolve(42);           // rendezvous:阻塞至被取走
+        bool ok = aw->resolve(42);           // 入队并立即返回;consumer 被唤醒取走
         consumer.join();
         QVERIFY(ok);
         QVERIFY(hasVal);
         QCOMPARE(got, 42);
     }
 
-    // 可复用:连续多次 rendezvous。
+    // 队列缓冲:无消费者时也能连续放入多个元素,之后再依次取出(FIFO)。
+    // 单线程即可完成 —— 缓冲式 channel 的核心要求。
+    void buffersMultipleWithoutConsumer() {
+        auto aw = std::make_shared<coro::sync_awaitable<int>>();
+        for (int i = 0; i < 5; ++i)
+            QVERIFY(aw->resolve(i));     // 无消费者也立即入队返回
+        for (int i = 0; i < 5; ++i) {
+            auto r = aw->await();        // 队列非空,立即取出
+            QVERIFY(r.has_value());
+            QCOMPARE(r.value(), i);
+        }
+    }
+
+    // 可复用:连续多次交接。
     void reuseMultiShot() {
         auto aw = std::make_shared<coro::sync_awaitable<int>>();
         std::vector<int> got;

@@ -113,11 +113,15 @@ private:
     boost::fibers::unbuffered_channel<std::monostate> ch_;
 };
 
-// ── 跨线程版 awaitable ─────────────────────────────────────────────────────────
-// 与 awaitable<T> 同义,但底层用 coro::sync_channel(std::mutex+cv,阻塞 OS 线程)。
-// 因此 await()/resolve() 可在【非 fiber 线程】(普通 std::thread、跑 Qt 事件循环的主线程)调用,
-// 不依赖 fiber 调度器被驱动。生产者与消费者须在【不同 OS 线程】(同线程 fiber↔fiber 会死锁,
-// 那种场景用 awaitable<T>)。接口、result<T> 语义与 awaitable<T> 完全一致。
+// ── 跨线程【缓冲】版 awaitable ─────────────────────────────────────────────────
+// 与 awaitable<T> 接口/`result<T>` 语义一致,但底层用 coro::sync_channel(std::mutex+cv 的
+// 无界 FIFO 队列)。差异:
+//   * resolve() 把值【入队后立即返回】(不等待消费,可连续放入多个元素并被缓冲);
+//   * await()/resolve() 可在【非 fiber 线程】(普通 std::thread、Qt 主线程的槽里)调用,
+//     不依赖 fiber 调度器被驱动;
+//   * close() 后 await() 先取尽队列剩余元素,空后才得到 closed()。
+// ⚠️ await() 在队列空时阻塞 **OS 线程**:不要在「与生产者同一线程的 fiber」里 await 空通道
+//    (会冻结整个调度器 → 死锁);跨线程消费才是它的用途。同线程 fiber↔fiber 用 awaitable<T>。
 template<class T>
 class sync_awaitable {
 public:
