@@ -7,6 +7,39 @@
 
 ## [Unreleased]
 
+### Added — `coro::qt_round_robin` Qt 事件循环 fiber 调度器
+
+- **`coro::qt_round_robin`**(`coro/qt_round_robin.h`,独立头文件,**不**并入伞头文件):仿 boost.fiber
+  官方 `examples/asio/round_robin.hpp` 的 Qt 调度器。**事件循环本身驱动 fiber 调度** —— 主 fiber 经
+  `qt_round_robin::run()` 跑 service loop,Qt 事件在该 service-loop fiber(可挂起的普通上下文)里 pump;
+  `suspend_until()` 跑在 dispatcher 上下文,**绝不 pump、绝不挂起**,只为 boost.fiber 原生定时等待
+  (`this_fiber::sleep_for` 等)启动一个单次 `QTimer` 唤醒并 `notify` service loop。`notify()`(可跨线程)
+  经按线程查询到的 `QAbstractEventDispatcher::wakeUp()` 唤醒阻塞中的 `processEvents`,以排空 remote-ready /
+  到期 sleep 的 fiber。这样槽里的 `resolve()`(= `unbuffered_channel::push` 的潜在挂起)发生在 service-loop
+  fiber 而非 dispatcher,**根除**了下述诊断出的崩溃类。`run()`/`stop()` 为静态接口(`stop()` 须由调度器线程
+  上的 fiber 调用)。
+- 实现要点:`suspend_until()` 的 QTimer 间隔**向上取整**到毫秒 —— 截断(floor)会让 QTimer 早于 fiber 真实
+  唤醒时刻触发,`sleep2ready` 认为未到期、单次 QTimer 又已耗尽 → `processEvents` 永久挂死;`notify()`/`stop()`
+  按 `QThread*` 重新查询 dispatcher 而非缓存指针 —— 退出期 `QCoreApplication` 先析构,缓存指针会悬空导致
+  收尾时 use-after-free。
+- 新增测试 `test_round_robin`:(a) `QTimer` 唤醒推进原生 `sleep_for` 挂起的 fiber;(b) 槽里 `resolve` 一个
+  park 着的 fiber 不崩;(c) `std::thread` 跨线程 `resolve` 唤醒 park 着的 fiber。
+- 设计文档:`docs/superpowers/specs/2026-06-22-qt-round-robin-design.md`。
+
+### Added — 崩溃诊断:dispatcher 上下文不可挂起
+
+- 诊断并固化两类崩溃复现(均源于在 **dispatcher 上下文**或**无 consumer 的事件泵 fiber**上触发
+  `awaitable::resolve()` → `unbuffered_channel::push` 挂起):
+  - `tests/test_resolve_crash.cpp`:在事件循环线程对「无 fiber 停在 `await()`」的 awaitable 调用 `resolve()`
+    会挂起事件泵 fiber、无可运行 fiber → `resume(nullptr)` 崩溃(`control`/`double`/`no_awaiter`/`before_await`/
+    `stdthread*` 等场景;无参跑 `control` 作回归)。
+  - `tests/test_sched_crash.cpp`:自定义调度器在 `suspend_until()`(dispatcher 上下文)里 `processEvents`,槽里
+    `resolve()` 挂起连带挂起 dispatcher → `context_initializer::active_` 置空 → 段错误;对照 `good`/`safe` 模式
+    由普通 fiber 泵事件则正常。
+- 配套**安全调度器** `coro::qt_scheduler`(`coro/qt_scheduler.h`):`suspend_until()` 只在条件变量上阻塞等待,
+  不 pump、不挂起任何 fiber;事件交由普通 fiber 泵,使槽里的 `resolve()` 在可挂起上下文运行。
+  (后续 `coro::qt_round_robin` 给出对齐 asio 的更完整范式。)
+
 ### Added — QIODevice 字节块生成器
 
 - **`coro::generate(QIODevice*)`**(`coro/iodevice.h`,已在伞头文件中):返回 move-only 的
