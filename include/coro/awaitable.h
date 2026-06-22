@@ -5,6 +5,7 @@
 #include <utility>
 #include <variant>          // std::monostate
 #include <boost/fiber/all.hpp>
+#include "coro/sync_channel.h"   // 跨线程、可在非 fiber 线程使用的 rendezvous 通道
 
 namespace coro {
 
@@ -110,6 +111,64 @@ public:
 
 private:
     boost::fibers::unbuffered_channel<std::monostate> ch_;
+};
+
+// ── 跨线程版 awaitable ─────────────────────────────────────────────────────────
+// 与 awaitable<T> 同义,但底层用 coro::sync_channel(std::mutex+cv,阻塞 OS 线程)。
+// 因此 await()/resolve() 可在【非 fiber 线程】(普通 std::thread、跑 Qt 事件循环的主线程)调用,
+// 不依赖 fiber 调度器被驱动。生产者与消费者须在【不同 OS 线程】(同线程 fiber↔fiber 会死锁,
+// 那种场景用 awaitable<T>)。接口、result<T> 语义与 awaitable<T> 完全一致。
+template<class T>
+class sync_awaitable {
+public:
+    static_assert(std::is_default_constructible_v<T>,
+                  "sync_awaitable<T>: T 必须可默认构造(await() 内 'T v;' 的要求)");
+    sync_awaitable() = default;
+    sync_awaitable(const sync_awaitable&) = delete;
+    sync_awaitable& operator=(const sync_awaitable&) = delete;
+
+    result<T> await() {
+        T v;
+        auto st = ch_.pop(v);
+        if (st == channel_status::success)
+            return result<T>::value(std::move(v));
+        return result<T>::closed_();
+    }
+
+    bool resolve(T v) {
+        return ch_.push(std::move(v)) == channel_status::success;
+    }
+
+    void close() { ch_.close(); }
+
+private:
+    sync_channel<T> ch_;
+};
+
+// void 特化:内部用 sync_channel<std::monostate>
+template<>
+class sync_awaitable<void> {
+public:
+    sync_awaitable() = default;
+    sync_awaitable(const sync_awaitable&) = delete;
+    sync_awaitable& operator=(const sync_awaitable&) = delete;
+
+    result<void> await() {
+        std::monostate m;
+        auto st = ch_.pop(m);
+        if (st == channel_status::success)
+            return result<void>::value();
+        return result<void>::closed_();
+    }
+
+    bool resolve() {
+        return ch_.push(std::monostate{}) == channel_status::success;
+    }
+
+    void close() { ch_.close(); }
+
+private:
+    sync_channel<std::monostate> ch_;
 };
 
 } // namespace coro
